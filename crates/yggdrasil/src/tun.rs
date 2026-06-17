@@ -49,6 +49,9 @@ impl TunAdapter {
         let tun_name = if name == "auto" {
             if cfg!(windows) {
                 "Yggdrasil"
+            } else if cfg!(target_os = "macos") {
+                // macOS requires the interface name to start with "utun".
+                "utun0"
             } else {
                 "ygg0"
             }

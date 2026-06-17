@@ -46,8 +46,10 @@ listen = ["tcp://0.0.0.0:0"]
 # admin_listen = "tcp://localhost:9001"
 
 # Name of the TUN interface to use.
-# "auto" = automatically assign a name.
+# "auto" = automatically assign a name (ygg0 on Linux, Yggdrasil on Windows,
+#          utun0 on macOS).
 # "none" = disable the TUN interface (useful for router-only nodes).
+# On macOS a custom name must start with "utun" (e.g. "utun3").
 if_name = "auto"
 
 # Maximum Transmission Unit (MTU) for the TUN interface.
