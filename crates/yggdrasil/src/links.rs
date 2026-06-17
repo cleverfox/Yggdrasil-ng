@@ -842,7 +842,10 @@ impl Links {
         };
 
         let host = url.host_str().ok_or("missing host")?.to_string();
-        let port = url.port().ok_or("missing port")?;
+        // `port_or_known_default()` so `wss://host` / `ws://host` infer 443 / 80.
+        // (The `url` crate omits a port equal to the scheme's known default, so
+        // even an explicit `wss://host:443` reports `port() == None`.)
+        let port = url.port_or_known_default().ok_or("missing port")?;
         let target = format!("{}:{}", host, port);
 
         // Attempt DNS resolution for duplicate detection.
@@ -915,6 +918,7 @@ impl Links {
                         &target,
                         &host,
                         port,
+                        url.path(),
                         options.tls_sni.as_deref(),
                         tls_connector.as_ref(),
                         use_ws,
@@ -1042,6 +1046,14 @@ pub(crate) async fn handle_connection(
             .write_all(&encoded)
             .await
             .map_err(|e| format!("write handshake: {}", e))?;
+        // Flush is mandatory for buffered transports (WebSocket): `write_all`
+        // only queues into the sink, so without this the metadata frame never
+        // reaches the peer and both sides stall until the handshake times out.
+        // No-op for raw TCP.
+        stream
+            .flush()
+            .await
+            .map_err(|e| format!("flush handshake: {}", e))?;
 
         // Read directly from stream without BufReader to avoid consuming
         // ironwood protocol data that arrives right after the handshake.
@@ -1240,6 +1252,7 @@ async fn dial_stream(
     target: &str,
     host: &str,
     port: u16,
+    path: &str,
     sni: Option<&str>,
     tls_connector: Option<&TlsConnector>,
     use_ws: bool,
@@ -1271,7 +1284,7 @@ async fn dial_stream(
         if use_ws {
             let base: Box<dyn ironwood::types::AsyncConn> = Box::new(tls_stream);
             let ws =
-                crate::transport::ws::ws_client_handshake(base, host, port, remote_addr).await?;
+                crate::transport::ws::ws_client_handshake(base, host, port, path, remote_addr).await?;
             Ok(Stream::Ws(ws))
         } else {
             Ok(Stream::TlsClient(tls_stream))
@@ -1279,7 +1292,7 @@ async fn dial_stream(
     } else if use_ws {
         let base: Box<dyn ironwood::types::AsyncConn> = Box::new(stream);
         let ws =
-            crate::transport::ws::ws_client_handshake(base, host, port, remote_addr).await?;
+            crate::transport::ws::ws_client_handshake(base, host, port, path, remote_addr).await?;
         Ok(Stream::Ws(ws))
     } else {
         Ok(Stream::Tcp(stream))

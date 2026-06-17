@@ -23,6 +23,7 @@ pub(crate) async fn ws_client_handshake(
     stream: Box<dyn AsyncConn>,
     host: &str,
     port: u16,
+    path: &str,
     remote_addr: SocketAddr,
 ) -> Result<WsStream, String> {
     use tokio_tungstenite::tungstenite::handshake::client::generate_key;
@@ -34,7 +35,10 @@ pub(crate) async fn ws_client_handshake(
     } else {
         format!("{}:{}", host, port)
     };
-    let ws_url = format!("ws://{}/", authority);
+    // Honor the peer URL's path (e.g. `/yws` when behind a reverse proxy).
+    // Empty path falls back to root.
+    let path = if path.is_empty() { "/" } else { path };
+    let ws_url = format!("ws://{}{}", authority, path);
     let uri: Uri = ws_url
         .parse()
         .map_err(|e| format!("invalid WS URI: {}", e))?;
